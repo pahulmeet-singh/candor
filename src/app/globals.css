@@ -1,0 +1,284 @@
+@import "tailwindcss";
+
+/*
+ * Candor design tokens.
+ *
+ * One dark theme on purpose: a deep teal ground, cream text, and a highlighter
+ * yellow that is used for exactly the things a highlighter is used for (the
+ * primary action, a strength worth keeping). Coral marks a gap, sky is
+ * informational, sage means done. Every text/background pair below clears
+ * WCAG AA (4.5:1) for body text.
+ */
+:root {
+  color-scheme: dark;
+
+  --background: #0a1d21;
+  --foreground: #f3ead6;
+  --surface: #0e2a2f;
+  --raised: #143339;
+  --raised-2: #1b414a;
+  --line: #21464e;
+  --line-strong: #31606b;
+  /* Borders of controls (inputs, switches): at least 3:1 against every surface, as WCAG 1.4.11 asks. */
+  --field: #44808c;
+  --muted: #9bb2ae;
+  --faint: #7f9a96;
+
+  --primary: #f4d03f;
+  --primary-foreground: #0a1d21;
+  --coral: #ff8d78;
+  --sky: #8ccbff;
+  --sage: #98d9ab;
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-raised-2: var(--raised-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-field: var(--field);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-coral: var(--coral);
+  --color-sky: var(--sky);
+  --color-sage: var(--sage);
+
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: var(--radius);
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 12px 32px -16px rgb(0 0 0 / 0.55);
+  --shadow-pop: 0 1px 0 0 rgb(255 255 255 / 0.05) inset, 0 24px 60px -20px rgb(0 0 0 / 0.7);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(1100px 520px at 12% -8%, rgb(244 208 63 / 0.07), transparent 62%),
+      radial-gradient(900px 480px at 92% -4%, rgb(140 203 255 / 0.06), transparent 60%);
+    background-attachment: fixed;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: rgb(244 208 63 / 0.35);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  button,
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Thin scrollbars that match the ground instead of the OS default. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@layer components {
+  /* "Skip to content" appears only when it receives keyboard focus. */
+  .skip-link {
+    position: fixed;
+    left: 1rem;
+    top: -4rem;
+    z-index: 100;
+    border-radius: 0.5rem;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    padding: 0.5rem 0.9rem;
+    font-weight: 600;
+    transition: top 0.15s ease;
+  }
+  .skip-link:focus {
+    top: 1rem;
+  }
+
+  /* The serif voice: questions, answers, report prose. */
+  .prose-reading {
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: var(--foreground);
+  }
+
+  /*
+   * The signature element: a highlighter pen over the exact words an
+   * annotation talks about. Strengths are a solid yellow wash; gaps are coral
+   * with a dashed underline, so the two differ by more than colour alone.
+   */
+  mark.hl {
+    color: inherit;
+    padding: 0.04em 0.14em;
+    margin: 0 -0.04em;
+    border-radius: 0.2em;
+    background: linear-gradient(
+      transparent 10%,
+      rgb(244 208 63 / 0.36) 10%,
+      rgb(244 208 63 / 0.36) 94%,
+      transparent 94%
+    );
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  mark.hl[data-kind="gap"] {
+    background: linear-gradient(
+      transparent 10%,
+      rgb(255 141 120 / 0.28) 10%,
+      rgb(255 141 120 / 0.28) 94%,
+      transparent 94%
+    );
+    text-decoration: underline dashed rgb(255 141 120 / 0.9);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.22em;
+  }
+  mark.hl sup {
+    margin-left: 0.15em;
+    font-family: var(--font-sans);
+    font-size: 0.62em;
+    font-weight: 700;
+    color: var(--foreground);
+    opacity: 0.85;
+  }
+
+  /*
+   * The one orchestrated motion on the site: the highlighter sweeping across
+   * the hero phrase once, shortly after load. With reduced motion it simply
+   * starts fully drawn.
+   */
+  .sweep {
+    background-image: linear-gradient(rgb(244 208 63 / 0.42), rgb(244 208 63 / 0.42));
+    background-repeat: no-repeat;
+    background-position: 0 88%;
+    background-size: 0% 46%;
+    animation: sweep 0.9s 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+    padding: 0 0.08em;
+    margin: 0 -0.08em;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  .field-shadow {
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.03) inset;
+  }
+
+  /* Small entrance for dialogs and menus. Disabled for reduced motion by the rule below. */
+  .anim-fade {
+    animation: fade-in 0.16s ease-out both;
+  }
+  .anim-pop {
+    animation: pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.98);
+  }
+}
+
+@keyframes sweep {
+  to {
+    background-size: 100% 46%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep {
+    animation: none;
+    background-size: 100% 46%;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Printing a report: flip the tokens to ink on paper and hide the app chrome. */
+@media print {
+  :root {
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: #14181a;
+    --surface: #ffffff;
+    --raised: #f2f2ef;
+    --raised-2: #e8e8e3;
+    --line: #d4d4cc;
+    --line-strong: #b9b9b0;
+    --muted: #4b5557;
+    --faint: #5f6a6c;
+    --primary: #b58f00;
+    --primary-foreground: #ffffff;
+    --coral: #b4412c;
+    --sky: #1c5f93;
+    --sage: #2f7a47;
+  }
+  body {
+    background: #ffffff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-flat {
+    box-shadow: none !important;
+    border-color: var(--line) !important;
+    break-inside: avoid;
+  }
+}
