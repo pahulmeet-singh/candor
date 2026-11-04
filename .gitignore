@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# prisma generated client (created by `prisma generate`, see postinstall)
+src/generated/
+
+# env files: only the example is committed
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+coverage/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
