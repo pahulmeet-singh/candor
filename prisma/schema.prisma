@@ -1,0 +1,167 @@
+// Candor data model (INT257).
+//
+// Prisma 7 notes for the viva:
+//  - The datasource has no `url` here. The CLI reads connection strings from
+//    prisma.config.ts, and the running app passes its own to a driver adapter
+//    (src/lib/prisma-client.ts). That is what lets the app use Supabase's pooled
+//    port while migrations use the session port.
+//  - The `prisma-client` generator writes plain TypeScript into src/generated
+//    (git-ignored, rebuilt by `prisma generate` on install and before build).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum InterviewCategory {
+  FRONTEND
+  BACKEND
+  DSA
+  SYSTEM_DESIGN
+  BEHAVIOURAL
+  FULLSTACK_NEXT
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ── Users and Auth.js tables ───────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @db.Timestamptz(3)
+  image         String?
+  /// bcrypt hash. Null for accounts created through Google.
+  passwordHash  String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  accounts   Account[]
+  sessions   Session[]
+  interviews Interview[]
+  resume     Resume?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// Only used by the Auth.js adapter when sessions are stored in the database.
+/// Candor uses JWT sessions, so this table stays empty, but the adapter expects it.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime @db.Timestamptz(3)
+
+  @@unique([identifier, token])
+}
+
+// ── Product tables ─────────────────────────────────────────────────────────
+
+/// One résumé per user. The PDF itself lives in a private Supabase Storage
+/// bucket; this row stores where it is and what it is called.
+model Resume {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  fileName    String
+  /// Object path inside the bucket: `<userId>/<uuid>.pdf`.
+  storagePath String   @unique
+  sizeBytes   Int
+  uploadedAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviews Interview[]
+}
+
+model Interview {
+  id          String            @id @default(cuid())
+  userId      String
+  /// Set when the user asked for questions tailored to their résumé.
+  resumeId    String?
+  category    InterviewCategory
+  difficulty  Difficulty        @default(INTERMEDIATE)
+  scheduledAt DateTime          @db.Timestamptz(3)
+  durationMin Int               @default(30)
+  status      InterviewStatus   @default(SCHEDULED)
+  /// Questions and the candidate's answers. Validated by transcriptSchema.
+  transcript  Json?
+  startedAt   DateTime?         @db.Timestamptz(3)
+  completedAt DateTime?         @db.Timestamptz(3)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume   Resume?   @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  feedback Feedback?
+
+  /// "My interviews" tabs and the active-bookings limit.
+  @@index([userId, status, scheduledAt])
+  /// Seat counts for a day of slots.
+  @@index([scheduledAt, status])
+  @@index([resumeId])
+}
+
+model Feedback {
+  id           String   @id @default(cuid())
+  interviewId  String   @unique
+  /// 0-100, computed on the server from the per-question scores.
+  overallScore Int
+  /// The full report. Validated by evaluationSchema before it is written and when it is read.
+  evaluation   Json
+  /// Which model produced it, e.g. `gemini-3.8-flash` or `candor-rubric-v1`.
+  model        String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
