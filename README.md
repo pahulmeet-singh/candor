@@ -183,3 +183,4 @@ The tests cover the logic that is easy to get subtly wrong: slot generation acro
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Supabase and Vercel setup, environment, first-run checklist, troubleshooting.
 - [docs/VIVA_CHEAT_SHEET.md](docs/VIVA_CHEAT_SHEET.md): syllabus-to-code map and likely viva questions with answers.
 # candor
+# candor
