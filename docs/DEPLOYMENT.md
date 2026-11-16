@@ -59,19 +59,20 @@ Run these in order on your own machine. Each step tells you something different,
 
 ```bash
 nvm use                 # Node 22
-npm install             # also runs `prisma generate` (creates src/generated/prisma)
-npm run typecheck       # 1. types against the real Next, Prisma and Auth.js packages
-npm run lint            # 2. ESLint with the Next 16 config
-npm test                # 3. unit tests, no database needed
-npm run db:deploy       # 4. create the tables (needs DIRECT_URL)
-npm run db:seed         # 5. demo users and sessions
-npm run build           # 6. production build
-npm run dev             # 7. then walk through the smoke test below
+npm install             # also runs `prisma generate` (creates src/generated/prisma) and copies the face detector's files to public/mediapipe
+npm run lint            # 1. ESLint with the Next 16 config
+npm test                # 2. unit tests, no database needed
+npm run db:deploy       # 3. create the tables (needs DIRECT_URL)
+npm run db:seed         # 4. demo users and sessions
+npm run build           # 5. production build
+npm run dev             # 6. then walk through the smoke test below
 ```
 
-**Why this order.** `typecheck`, `lint` and `test` need no database, so they fail fast and name the file and line of any problem. The database steps come next because the landing page reads its public counters while it is built (if the database is unreachable it simply renders without them). `build` last proves the whole app compiles and prints the route table used in [section 5](#5-reading-the-build-output).
+Optional but worth doing once: the database and browser tests (`npm run test:integration`, `npm run test:e2e`). They need a throwaway local PostgreSQL; the setup is in [TESTING.md](TESTING.md).
 
-Versions are pinned in `package.json` (Auth.js exactly, the rest with a caret). If a later minor release of Next.js, Prisma or Auth.js changes a signature, `npm run typecheck` shows where. Run the whole checklist once, on the machine you will present from, **before** the viva day.
+**Why this order.** `lint` and `test` need no database, so they fail fast and name the file and line of any problem. The database steps come next because the landing page reads its public counters while it is built (if the database is unreachable it simply renders without them). `build` last proves the whole app compiles and prints the route table used in [section 5](#5-reading-the-build-output).
+
+Versions are pinned in `package.json` (Auth.js exactly, the rest with a caret). If a later minor release of Next.js, Prisma or Auth.js changes a signature, the tests and `npm run build` are where it shows. Run the whole checklist once, on the machine you will present from, **before** the viva day.
 
 ### Smoke test (about five minutes)
 
@@ -88,6 +89,7 @@ Versions are pinned in `package.json` (Auth.js exactly, the rest with a caret). 
 | 9 | `/resume`: upload a PDF, then a `.txt` renamed to `.pdf` | First is saved; second is refused ("does not look like a PDF") |
 | 10 | `/admin` as the student, then as `admin@candor.test` | 404 first, then the admin page |
 | 11 | `GET /api/health` | `{"status":"ok", ...,"runtime":"edge"}` |
+| 12 | Optional, needs a camera: book an **Assessment** (tick the consent box), open the room and allow the camera | The panel shows your picture and "One face in view". After submitting, the report has a "Presence and focus" section; a practice report has none |
 
 If step 6 or 7 shows the report's model as `candor-rubric-v1`, the offline evaluator produced it, which is expected without a Gemini key.
 
@@ -107,6 +109,7 @@ If step 6 or 7 shows the report's model as `candor-rubric-v1`, the offline evalu
    | `NEXT_PUBLIC_APP_URL` | `https://your-domain.vercel.app` (used for metadata, sitemap and the Open Graph image) |
    | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | only if you enable Google |
    | `DEMO_MODE` | `false` (or leave unset) for a real deployment; `true` for the viva |
+   | `NEXT_PUBLIC_FACE_MODEL_URL` | optional; a path under `public/` to serve the face-detection model yourself. Empty uses Google's published file. It is read at build time |
 
 4. **Run the migrations once**, from your own machine, against the production database:
 
@@ -114,13 +117,15 @@ If step 6 or 7 shows the report's model as `candor-rubric-v1`, the offline evalu
    DIRECT_URL="<session pooler string>" npm run db:deploy
    ```
 
+   **Upgrading an existing deployment?** Run this *before* deploying the new code. The migration `20261112000000_integrity_monitoring` adds columns (`Interview.mode`, `Interview.monitoringConsentAt`) and a table that the new code reads, so code that arrives first would fail on pages that list interviews.
+
    Migrations are deliberately not part of the Vercel build: a failed migration should stop you before a deploy, not halfway through one. Seed data is for development; do not run `db:seed` against a database with real users (it only touches the three demo accounts, but there is no reason to create them in production).
 5. **Google sign-in (optional).** In Google Cloud Console create an OAuth client of type *Web application* and add the authorised redirect URI `https://your-domain/api/auth/callback/google` (and `http://localhost:3000/api/auth/callback/google` for local use). Put the client id and secret in the two variables above. The button appears only when both are set.
 6. Deploy. Then run the smoke test above against the live URL.
 
 **Region.** Choose the Vercel function region closest to your Supabase region (for example Mumbai for `ap-south-1`) in *Settings, Functions*. Every page that touches the database makes several round trips; distance between the two is the biggest factor in how fast they feel.
 
-**Function duration.** The two AI routes declare `maxDuration = 60`. Check that your Vercel plan allows it; if not, lower the constant in `src/app/api/interviews/[id]/questions/route.ts` and `.../evaluate/route.ts`. Inside that limit, a Gemini call is capped at 45 seconds and all attempts for one request (the first call and the one repair) share a 50-second budget; when it runs out the offline fallback takes over, so a session is not lost.
+**Function duration.** The two AI routes declare `maxDuration = 60`. Check that your Vercel plan allows it; if not, lower the constant in `src/app/api/interviews/[id]/questions/route.js` and `.../evaluate/route.js`. Inside that limit, a Gemini call is capped at 45 seconds and all attempts for one request (the first call and the one repair) share a 50-second budget; when it runs out the offline fallback takes over, so a session is not lost.
 
 **Other hosts.** Any host with Node 22 can run `npm ci && npm run build && npm start`. Set the same variables and `PORT` as the host requires. `trustHost` is on in the Auth.js config, so it works behind a reverse proxy that forwards `Host` or `X-Forwarded-Host`.
 
@@ -144,7 +149,7 @@ You can also run `next start` after the build and confirm ISR by loading `/` and
 - **Logs** are one JSON object per line on stdout. On Vercel, *Logs* can filter by text, so searching `request.error` finds every uncaught server error, `booking.serialization_retry` shows booking contention, `ai.repair` and `ai.evaluate.fallback` show how often the AI misbehaved, and `web-vital` lines carry Core Web Vitals.
 - **Request ids.** Every response carries `x-request-id`. When a user reports "something went wrong", ask for the id in the error body or in the response header and search the logs for it.
 - **Uptime.** Point an uptime monitor at `GET /api/health`. It is on the Edge runtime and does not touch the database, so it tells you the deployment is serving, not that the database is up; for that, load any signed-in page or add a database ping.
-- **Error tracking.** `src/instrumentation.ts` is where Sentry or OpenTelemetry would be registered. It currently logs through `onRequestError`.
+- **Error tracking.** `src/instrumentation.js` is where Sentry or OpenTelemetry would be registered. It currently logs through `onRequestError`.
 
 ## 7. Before real users
 
@@ -152,10 +157,11 @@ Candor is a course project that is built to a production standard in most places
 
 1. Set `DEMO_MODE=false`.
 2. Replace the in-memory rate limiter with a shared store (Upstash Redis), since each serverless instance counts separately.
-3. Add a Content-Security-Policy with per-request nonces in `proxy.ts`.
-4. Pin Supabase's CA certificate and turn certificate verification on in `lib/prisma-client.ts`.
+3. Add a Content-Security-Policy with per-request nonces in `proxy.js`.
+4. Pin Supabase's CA certificate and turn certificate verification on in `lib/prisma-client.js`.
 5. Add email verification and password reset.
 6. Rotate the service-role key if it was ever pasted anywhere other than the host's secret store, and enable Supabase backups.
+7. If you will use Assessment mode with real candidates: check it against the data-protection rules that apply to you, calibrate its thresholds on real recordings (they are reasoned, not measured), and consider serving the face model yourself (`NEXT_PUBLIC_FACE_MODEL_URL`). A future Content-Security-Policy must allow `wasm-unsafe-eval`, `https://storage.googleapis.com` and workers. See [INTEGRITY.md](INTEGRITY.md).
 
 ---
 
@@ -163,16 +169,16 @@ Candor is a course project that is built to a production standard in most places
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `npm install` fails with `No matching version found for <package>@<range>` | A version range in `package.json` names a release that is not on npm. Run `npm view <package> versions --json`, pick the closest release, edit `package.json` and install again. Keep `next-auth` and `@auth/prisma-adapter` on the exact versions they are pinned to unless `npm run typecheck` is clean afterwards. |
-| `npm run typecheck` reports a handful of errors the first time | The first run against the real Next, Prisma and Auth.js packages can disagree with a signature the code assumed. Each error names a file and line and is normally a one-line change; fix them before the viva, then re-run the whole checklist. |
+| `npm install` fails with `No matching version found for <package>@<range>` | A version range in `package.json` names a release that is not on npm. Run `npm view <package> versions --json`, pick the closest release, edit `package.json` and install again. Keep `next-auth` and `@auth/prisma-adapter` on the exact versions they are pinned to unless `npm test` and `npm run build` pass afterwards. |
+| `npm test` or `npm run build` reports an error the first time | The first run against the real Next, Prisma and Auth.js packages can disagree with a call the code assumed. Each error names a file and line and is normally a one-line change; fix them before the viva, then re-run the whole checklist. |
 | `npm run lint` flags `react-hooks/...` rules (`set-state-in-effect`, `refs`, `purity`) | Those come from the React Compiler rule set that `eslint-config-next` 16 turns on. They do not stop `next build`. Fix the flagged line (the message says how), or switch that single rule off in `eslint.config.mjs` if you are short of time. |
-| `Cannot find module '@/generated/prisma/client'` or types missing for `PrismaClient` | The client has not been generated. Run `npx prisma generate` (it also runs on `npm install` and `npm run build`). |
+| `Cannot find module '@/generated/prisma/client'` | The client has not been generated. Run `npx prisma generate` (it also runs on `npm install` and `npm run build`). |
 | `P1001: Can't reach database server` | Wrong host or port, or an IPv6-only direct host. Use the **pooler** hostnames from the Connect dialog. A paused free project must be restored first. |
 | `P1000` or `password authentication failed` | The password in the string is wrong, or contains characters that need URL-encoding (`@`, `/`, `#`). Encode it. |
 | `self-signed certificate in certificate chain` against a *local* database | Set `DATABASE_SSL=disable`. |
 | `MissingSecret` from Auth.js, or being signed out after every restart | `AUTH_SECRET` is missing or changes between runs. Set a fixed value. |
 | Sign-in works locally but fails on the deployed site | `NEXT_PUBLIC_APP_URL` or the Google redirect URI still points at localhost. |
-| Redirect loop between `/login` and `/dashboard` | A stale cookie from another secret. Clear cookies for the site. (`proxy.ts` is built not to cause this; it only checks that a cookie exists.) |
+| Redirect loop between `/login` and `/dashboard` | A stale cookie from another secret. Clear cookies for the site. (`proxy.js` is built not to cause this; it only checks that a cookie exists.) |
 | Résumé upload says storage is not configured | `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are both required. |
 | Résumé upload says "We could not reach file storage" | Check the secret or service-role key (not the publishable or anon key) and that the bucket name has no spaces or capitals. The log line `storage.failed` has the underlying error. |
 | Report page shows `candor-rubric-v1` as the model although a key is set | Gemini failed and the offline evaluator took over. Search the log for `ai.evaluate.fallback`. Set `AI_FALLBACK=false` temporarily to see the real error. |
@@ -180,4 +186,6 @@ Candor is a course project that is built to a production standard in most places
 | `Module not found: Can't resolve 'server-only'` | Run `npm install`; the package is listed in `dependencies`. |
 | Booking says "Many people are booking right now" | Three serialization retries failed in a row. It is the intended response to extreme contention; try again. |
 | Port 3000 is busy | `npm run dev -- -p 3001`, and update `NEXT_PUBLIC_APP_URL` and any OAuth redirect URI. |
+| Assessment: the panel says no camera could be used | The browser's camera permission for the site is blocked, another app holds the camera, the page is not on HTTPS or `localhost`, or the face model could not be downloaded. The interview still works, and the report notes "Camera not available". |
+| Assessment: `/mediapipe/wasm/...` returns 404 | The copy step did not run. Run `npm install` (or `node scripts/copy-mediapipe-wasm.mjs`) and rebuild. The folder is git-ignored and is created by `postinstall`. |
 | Want a clean slate | `npm run db:reset` drops all data, re-applies migrations and re-seeds. |

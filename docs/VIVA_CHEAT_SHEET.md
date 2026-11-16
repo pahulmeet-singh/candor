@@ -21,7 +21,7 @@ For INT257 · Modern Web Application Development. Read it once, then use it as a
 >
 > It is a Next.js 16 App Router application. Public pages are static or ISR, signed-in pages are server-rendered, and the interactive parts (slot picker, interview room) are small Client Components. Mutations are Server Actions, including the résumé upload that goes to Supabase Storage. Reads other clients may want, and the slow AI calls, are Route Handlers. Everything talks to PostgreSQL through Prisma, and Auth.js protects the routes with role-based access.
 >
-> The two parts we are proudest of are the booking transaction that cannot overbook a slot, and the AI pipeline that treats the model as untrusted: its output is validated, reconciled and re-scored on the server, and an offline evaluator takes over if the API is down.
+> The two parts we are proudest of are the booking transaction that cannot overbook a slot, and the AI pipeline that treats the model as untrusted: its output is validated, reconciled and re-scored on the server, and an offline evaluator takes over if the API is down. A newer third part is Assessment mode: an on-device camera and focus check whose output is a list of signals for a person to review, never a change to the score.
 
 ## Splitting the talking
 
@@ -30,8 +30,8 @@ Everyone should be able to explain every layer at a high level. This is a sugges
 | Member | Goes deep on | Files to know |
 | --- | --- | --- |
 | **A: front end and routing** | Layouts and route groups, rendering strategy per route, parallel and intercepting routes, UI kit, accessibility, SEO and metadata | `src/app/**`, `src/components/**`, `globals.css` |
-| **B: data and auth** | Prisma schema and migrations, seed, Auth.js, RBAC, the booking service and transaction, Server Actions, résumé upload | `prisma/**`, `src/lib/auth/**`, `src/lib/services/booking.ts`, `src/actions/**`, `src/lib/services/resume.ts` |
-| **C: AI and platform** | Gemini integration, prompts and schemas, reconcile, session lifecycle and autosave, Route Handlers, errors and logging, tests, deployment | `src/lib/ai/**`, `src/lib/services/session.ts`, `src/app/api/**`, `src/lib/http.ts`, `tests/**` |
+| **B: data and auth** | Prisma schema and migrations, seed, Auth.js, RBAC, the booking service and transaction, Server Actions, résumé upload | `prisma/**`, `src/lib/auth/**`, `src/lib/services/booking.js`, `src/actions/**`, `src/lib/services/resume.js` |
+| **C: AI and platform** | Gemini integration, prompts and schemas, reconcile, session lifecycle and autosave, Route Handlers, errors and logging, the integrity monitor (rules, server checks), tests, deployment | `src/lib/ai/**`, `src/lib/services/session.js`, `src/app/api/**`, `src/lib/http.js`, `src/lib/integrity/**`, `tests/**` |
 
 ## Syllabus map
 
@@ -41,12 +41,12 @@ Every topic in the syllabus, and where to point at it.
 
 | Topic | In Candor |
 | --- | --- |
-| Next.js features, project structure, App Router, dev workflow | `src/app` with route groups; `npm run dev`, `typecheck`, `lint`, `test`; README "Project structure" |
-| File-based routing | Every `page.tsx` under `src/app` |
+| Next.js features, project structure, App Router, dev workflow | `src/app` with route groups; `npm run dev`, `lint`, `test`; README "Project structure" |
+| File-based routing | Every `page.jsx` under `src/app` |
 | Dynamic routes | `categories/[slug]`, `interviews/[id]`, `feedback/[id]`, `api/**/[id]` |
 | Nested routes and layouts | `interviews/[id]/session`; root layout, `(marketing)`, `(auth)`, `(app)` and `dashboard` layouts |
 | Navigation | `next/link` everywhere, `usePathname` for the active nav item, `useRouter` after mutations, `redirect()` in actions and pages |
-| Error and loading UI | `loading.tsx` at `(app)`, `interviews`, `feedback` and each dashboard slot; `error.tsx`, `global-error.tsx`, `not-found.tsx` |
+| Error and loading UI | `loading.jsx` at `(app)`, `interviews`, `feedback` and each dashboard slot; `error.jsx`, `global-error.jsx`, `not-found.jsx` |
 
 ### Unit II
 
@@ -57,10 +57,10 @@ Every topic in the syllabus, and where to point at it.
 | ISR | `/` with `revalidate = 600` |
 | Client-side rendering | Booking form, interview room, auth forms, résumé uploader |
 | Choosing a strategy | README table "Where each rendering strategy is used" |
-| Server and Client Components | Pages are Server Components; 27 leaf components are client (`"use client"`) |
-| Fetch API, client-side fetching | `components/booking/use-slots.ts` calls `/api/slots`; `start-panel.tsx` and `interview-room.tsx` call the AI routes; `lib/ai/gemini.ts` uses server-side `fetch` |
+| Server and Client Components | Pages are Server Components; 28 leaf components are client (`"use client"`) |
+| Fetch API, client-side fetching | `components/booking/use-slots.js` calls `/api/slots`; `start-panel.jsx` and `interview-room.jsx` call the AI routes; `lib/ai/gemini.js` uses server-side `fetch` |
 | Server-side data fetching | Pages call `src/lib/data/*` directly, no HTTP hop |
-| Caching and revalidation | `unstable_cache` + tag in `lib/data/public-stats.ts`; `revalidatePath` in actions; `revalidateTag` in the evaluate handler |
+| Caching and revalidation | `unstable_cache` + tag in `lib/data/public-stats.js`; `revalidatePath` in actions; `revalidateTag` in the evaluate handler |
 
 ### Unit III
 
@@ -68,48 +68,48 @@ Every topic in the syllabus, and where to point at it.
 | --- | --- |
 | Route Handlers, REST, HTTP methods | `src/app/api/**`: GET, POST, PATCH, DELETE; [docs/API.md](API.md) |
 | Dynamic Route Handlers | `api/interviews/[id]`, `[id]/questions`, `[id]/evaluate`, `api/feedback/[id]` |
-| Request and response handling | `NextRequest`, `NextResponse.json`, 201 with `Location`, 302 redirect, 204, `x-request-id`, one error envelope (`lib/http.ts`) |
+| Request and response handling | `NextRequest`, `NextResponse.json`, 201 with `Location`, 302 redirect, 204, `x-request-id`, one error envelope (`lib/http.js`) |
 | Server Actions, forms, validation | `src/actions/*`; `useActionState` in login, register, résumé, role forms; Zod through `parseInput` |
-| File upload | `uploadResumeAction` and `lib/services/resume.ts` |
+| File upload | `uploadResumeAction` and `lib/services/resume.js` |
 | Data mutations | book, cancel, save answer, upload, delete, set role |
-| Optimistic UI | `useOptimistic` in `components/interview/interview-list.tsx` (the cancelled row disappears at once) |
+| Optimistic UI | `useOptimistic` in `components/interview/interview-list.jsx` (the cancelled row disappears at once) |
 
 ### Unit IV
 
 | Topic | In Candor |
 | --- | --- |
-| Authentication concepts, session management | Auth.js, Credentials and Google, JWT in an HttpOnly cookie (7 days): `lib/auth/auth.ts` |
-| Protected routes | `proxy.ts` (optimistic), `requireUser()` in layouts and pages, `assertUser()` in actions and handlers |
+| Authentication concepts, session management | Auth.js, Credentials and Google, JWT in an HttpOnly cookie (7 days): `lib/auth/auth.js` |
+| Protected routes | `proxy.js` (optimistic), `requireUser()` in layouts and pages, `assertUser()` in actions and handlers |
 | Authorization, RBAC | `User.role`, `assertRole("ADMIN")` re-reading the database, `/admin` answers 404 |
-| ORM basics, connectivity | `prisma/schema.prisma`, `lib/prisma-client.ts` (driver adapter), `lib/db.ts` (singleton) |
+| ORM basics, connectivity | `prisma/schema.prisma`, `lib/prisma-client.js` (driver adapter), `lib/db.js` (singleton) |
 | CRUD | Create: booking, register, résumé. Read: `lib/data/*`. Update: start, autosave, cancel, role. Delete: résumé, cancel (soft) |
 | Data validation | Zod at every boundary and again on the JSON columns when read back; database constraints (unique, foreign keys) |
-| Environment variables | `.env.example`, typed lazy access in `lib/env.ts`, `server-only` on secret-using modules |
+| Environment variables | `.env.example`, typed lazy access in `lib/env.js`, `server-only` on secret-using modules |
 
 ### Unit V
 
 | Topic | In Candor |
 | --- | --- |
-| Image optimization | `next/image` for the avatar in `layout/user-menu.tsx`; `next/font` self-hosts both fonts |
-| Metadata API, SEO | `metadata` in the root layout, `generateMetadata` and JSON-LD on category pages, `opengraph-image.tsx`, `icon.svg`, `sitemap.ts`, `robots.ts`, canonical URLs |
-| Code splitting, lazy loading | `next/dynamic` for the trend chart (`shared/trend-chart-lazy.tsx`); route-level splitting by the App Router |
+| Image optimization | `next/image` for the avatar in `layout/user-menu.jsx`; `next/font` self-hosts both fonts |
+| Metadata API, SEO | `metadata` in the root layout, `generateMetadata` and JSON-LD on category pages, `opengraph-image.jsx`, `icon.svg`, `sitemap.js`, `robots.js`, canonical URLs |
+| Code splitting, lazy loading | `next/dynamic` for the trend chart (`shared/trend-chart-lazy.jsx`); route-level splitting by the App Router; the face detector is a dynamic `import()` that runs only when an assessment starts, so practice interviews never download it (`use-integrity-monitor.js`) |
 | Production build, environment configuration | `npm run build`, [docs/DEPLOYMENT.md](DEPLOYMENT.md) |
 | Deployment platforms | Vercel + Supabase, steps in DEPLOYMENT.md |
-| Performance monitoring | Core Web Vitals sent to `/api/vitals` and logged (`shared/web-vitals.tsx`) |
-| Error logging | `instrumentation.ts` `onRequestError`, JSON logger with redaction, request ids |
+| Performance monitoring | Core Web Vitals sent to `/api/vitals` and logged (`shared/web-vitals.jsx`) |
+| Error logging | `instrumentation.js` `onRequestError`, JSON logger with redaction, request ids |
 
 ### Unit VI
 
 | Topic | In Candor |
 | --- | --- |
 | Parallel routes | `dashboard/@stats`, `@trend`, `@upcoming`; `(app)/@modal` |
-| Proxy | `src/proxy.ts` (Next 16's rename of middleware) |
+| Proxy | `src/proxy.js` (Next 16's rename of middleware) |
 | Intercepting routes | `(app)/@modal/(.)feedback/[id]` |
 | Edge runtime | `api/health` with `export const runtime = "edge"` |
 | Internationalization | **Not implemented.** How we would do it is in the answers below |
 | Project architecture, component organization | Layered `app → services → data`, feature folders in `components`, [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Security best practices | [ARCHITECTURE.md section 12](ARCHITECTURE.md#12-security-checklist) |
-| Testing overview | `tests/`, 91 unit tests, `npm test` |
+| Testing overview | 216 unit tests (`tests/`), 33 integration tests on PostgreSQL (`tests/integration/`), 21 Playwright tests (`e2e/`), CI in `.github/workflows/ci.yml`; [TESTING.md](TESTING.md) |
 
 ### Course outcomes at a glance
 
@@ -117,7 +117,7 @@ Every topic in the syllabus, and where to point at it.
 | --- | --- |
 | CO1 Architecture and routing | Route groups, nested layouts, dynamic, parallel and intercepting routes |
 | CO2 Rendering and data fetching | Static, SSG, ISR, SSR and CSR each used on purpose; cache and revalidation |
-| CO3 APIs and Server Actions | 11 Route Handlers and 10 Server Actions sharing one service layer |
+| CO3 APIs and Server Actions | 12 Route Handlers and 10 Server Actions sharing one service layer |
 | CO4 Authentication and database | Auth.js with RBAC; Prisma with transactions and migrations |
 | CO5 Performance and deployment | `next/dynamic`, `next/image`, `next/font`, web vitals, Vercel guide |
 | CO6 Scalable practices | Layering, DTOs, one error type, rate limiting, tests, documented limits |
@@ -127,14 +127,14 @@ Every topic in the syllabus, and where to point at it.
 | Practical | Show |
 | --- | --- |
 | Create an app and explore the App Router structure | `src/app` tree; run `npm run dev` |
-| Nested, dynamic routing, layouts, loading and error UI | `/interviews/[id]/session`, `loading.tsx`, `error.tsx` |
-| Server and client data fetching, compare rendering | README rendering table; `use-slots.ts` vs `lib/data` |
+| Nested, dynamic routing, layouts, loading and error UI | `/interviews/[id]/session`, `loading.jsx`, `error.jsx` |
+| Server and client data fetching, compare rendering | README rendering table; `use-slots.js` vs `lib/data` |
 | Caching and revalidation | `/` ISR and the counter that changes after a report is saved |
 | REST APIs with Route Handlers and HTTP methods | `docs/API.md`, curl examples |
 | Forms, validation, files, mutations with Server Actions | Register form errors; résumé upload with a fake PDF |
 | Database with an ORM and CRUD | `schema.prisma`, `lib/data`, `lib/services`, Prisma Studio |
 | Auth, sessions, protected routes, RBAC | Sign out then open `/dashboard`; `/admin` as student and as admin |
-| Image optimization, metadata, code splitting, lazy loading | `user-menu.tsx`, `generateMetadata`, `trend-chart-lazy.tsx` |
+| Image optimization, metadata, code splitting, lazy loading | `user-menu.jsx`, `generateMetadata`, `trend-chart-lazy.jsx` |
 | Production build, environment, monitoring, logging | `npm run build` route table; JSON logs; `/api/health` |
 
 ---
@@ -159,7 +159,8 @@ Use two browser profiles (or one normal and one private window) so you can be tw
 | 6:30 | `/feedback`, open a report, then refresh | "Intercepting route: a dialog from inside the app, a full page on refresh." |
 | 7:00 | `/resume`: upload a PDF; then upload a renamed `.txt` | "Server Action, checked on the server including the `%PDF-` signature, stored in a private bucket. Downloads are 60-second signed links." |
 | 7:30 | `/admin` as student (404), then as `admin@candor.test` | "Role checked in the database, not the token. 404 so the route does not advertise itself." |
-| 7:50 | Open `lib/services/booking.ts` | "And this is the transaction. Happy to show the race at the SQL level." (see below) |
+| 7:50 | Open `lib/services/booking.js` | "And this is the transaction. Happy to show the race at the SQL level." (see below) |
+| 8:20 (if asked) | Book an **Assessment**: tick the consent box, start, allow the camera, paste a paragraph, submit | "The camera is analysed on this device and never recorded. What it noticed is in the report as signals for review, and the score is the same without it." Needs a camera, and `localhost` or HTTPS. |
 
 ## Live demo: the booking race
 
@@ -225,31 +226,31 @@ Short answers you can say out loud, with the file to open.
 ### Next.js fundamentals and routing
 
 **What is the App Router, and what does it give you over the Pages Router?**
-Routing by folders in `app/`, where a `page.tsx` makes a route and a `layout.tsx` wraps its children and stays mounted between navigations. Components are Server Components by default, loading and error UI are files (`loading.tsx`, `error.tsx`), data is fetched where it is used, and API endpoints are `route.ts` files next to the pages.
+Routing by folders in `app/`, where a `page.jsx` makes a route and a `layout.jsx` wraps its children and stays mounted between navigations. Components are Server Components by default, loading and error UI are files (`loading.jsx`, `error.jsx`), data is fetched where it is used, and API endpoints are `route.js` files next to the pages.
 
 **Walk me through a request to `/dashboard`.**
-`proxy.ts` checks a session cookie exists and tags the request with an id. `(app)/layout.tsx` calls `requireUser()`. `dashboard/layout.tsx` composes `children` and the three slots. Each slot page asks `lib/data` for its own data, so they render and stream independently, each behind its `loading.tsx`. The browser gets HTML plus the React Server Component payload, and only the client leaves (menu, chart wrapper) hydrate.
+`proxy.js` checks a session cookie exists and tags the request with an id. `(app)/layout.jsx` calls `requireUser()`. `dashboard/layout.jsx` composes `children` and the three slots. Each slot page asks `lib/data` for its own data, so they render and stream independently, each behind its `loading.jsx`. The browser gets HTML plus the React Server Component payload, and only the client leaves (menu, chart wrapper) hydrate.
 
 **Why three route groups?**
 `(marketing)`, `(auth)` and `(app)` do not change the URL; they exist to give each area its own layout and its own rule. Marketing has the public header and footer, auth redirects signed-in users away, and app has the sidebar shell and the session guard.
 
-**Why `proxy.ts` and not `middleware.ts`?**
+**Why `proxy.js` and not `middleware.js`?**
 Next.js 16 renamed middleware to proxy and runs it on the Node.js runtime. It is the same idea: code that runs before a request is routed. Ours does two cheap things, an optimistic "is there a session cookie?" redirect and a request id. It is deliberately not the authorization layer, because it cannot tell whether the cookie is still valid.
 
 **What are parallel routes and where do you use them?**
-Folders prefixed with `@` are slots, passed to the parent layout as props. We use `@stats`, `@trend` and `@upcoming` on the dashboard so each region fetches and streams on its own, and `@modal` for the report dialog. Every slot needs a `default.tsx` for URLs it cannot match.
+Folders prefixed with `@` are slots, passed to the parent layout as props. We use `@stats`, `@trend` and `@upcoming` on the dashboard so each region fetches and streams on its own, and `@modal` for the report dialog. Every slot needs a `default.jsx` for URLs it cannot match.
 
 **What are intercepting routes? What happens on refresh?**
-`(.)feedback/[id]` inside `@modal` intercepts a soft navigation to `/feedback/[id]` and renders the report as a dialog over the current page. A hard load, a refresh or a shared link has no "current page" to overlay, so Next renders the real `feedback/[id]/page.tsx` instead. Same URL, two presentations.
+`(.)feedback/[id]` inside `@modal` intercepts a soft navigation to `/feedback/[id]` and renders the report as a dialog over the current page. A hard load, a refresh or a shared link has no "current page" to overlay, so Next renders the real `feedback/[id]/page.jsx` instead. Same URL, two presentations.
 
 **What is the difference between a Server Component and a Client Component, and where is your boundary?**
 Server Components run only on the server, can read the database and ship no JavaScript. Client Components (`"use client"`) hydrate in the browser and can hold state and handle events. Our pages and layouts are all server; the client components are leaves: forms, the slot picker, the interview room, the dialog and menu. Server Components pass them plain serialisable props (DTOs).
 
-**What do `loading.tsx`, `error.tsx` and `not-found.tsx` do?**
-`loading.tsx` becomes a Suspense fallback for its segment. `error.tsx` is a client-side error boundary for the segment, with a retry. `not-found.tsx` renders when `notFound()` is called or no route matches; we call it for unknown categories, for other people's records and for `/admin` as a non-admin.
+**What do `loading.jsx`, `error.jsx` and `not-found.jsx` do?**
+`loading.jsx` becomes a Suspense fallback for its segment. `error.jsx` is a client-side error boundary for the segment, with a retry. `not-found.jsx` renders when `notFound()` is called or no route matches; we call it for unknown categories, for other people's records and for `/admin` as a non-admin.
 
 **What is the development workflow?**
-`npm run dev` (Turbopack, fast refresh), `npm run typecheck`, `npm run lint` (ESLint directly, since Next 16 removed `next lint`), `npm test`, `npm run build` to see the route table.
+`npm run dev` (Turbopack, fast refresh), `npm run lint` (ESLint directly, since Next 16 removed `next lint`), `npm test`, `npm run build` to see the route table.
 
 ### Rendering and data fetching
 
@@ -286,7 +287,7 @@ Actions for mutations triggered by our own UI that should refresh the page and w
 It is a public POST endpoint with a generated URL, so we treat it that way. Every action re-checks the session (`assertUser`), validates its input with Zod (`parseInput`) and is rate limited. Next.js also compares the `Origin` header with the host, and arguments are untrusted, so nothing is assumed from the form that rendered it.
 
 **How does your file upload work?**
-A `<form action>` posts `multipart/form-data`; the action receives a `File`. It checks size and extension, reads the bytes and checks the `%PDF-` signature (the MIME type is only a claim), uploads to a private Supabase bucket under a random name with the service-role key, upserts the `Resume` row, then deletes the old object. If the database write fails, the new object is removed. The body limit is raised to 5 MB in `next.config.ts`.
+A `<form action>` posts `multipart/form-data`; the action receives a `File`. It checks size and extension, reads the bytes and checks the `%PDF-` signature (the MIME type is only a claim), uploads to a private Supabase bucket under a random name with the service-role key, upserts the `Resume` row, then deletes the old object. If the database write fails, the new object is removed. The body limit is raised to 5 MB in `next.config.mjs`.
 
 **What do `useActionState`, `useFormStatus` and `useOptimistic` do here?**
 `useActionState` holds an action's last result, which is how forms show server-side field errors and keep working without JavaScript. `useFormStatus` powers `SubmitButton`, which shows a pending state without any state in the page. `useOptimistic` removes a cancelled booking from the list instantly.
@@ -309,16 +310,16 @@ The form calls `loginAction`: Zod validates, two rate limits apply (per address 
 Auth.js requires the JWT strategy for the Credentials provider, and a JWT saves a query per request. The cost is that a session cannot be revoked instantly and its copy of the role can be stale, which is why anything that matters re-reads the role from the database.
 
 **How is RBAC enforced?**
-Four places, each sufficient alone: `proxy.ts` (cookie exists), layouts and pages (`requireUser`), actions and handlers (`assertUser` / `assertRole`), and the queries themselves (`WHERE userId = ...`). `/admin` calls `assertRole("ADMIN")`, which reads the role from the database, and answers 404.
+Four places, each sufficient alone: `proxy.js` (cookie exists), layouts and pages (`requireUser`), actions and handlers (`assertUser` / `assertRole`), and the queries themselves (`WHERE userId = ...`). `/admin` calls `assertRole("ADMIN")`, which reads the role from the database, and answers 404.
 
 **If the layout checks the session, why does every page check it too?**
 Layouts are not re-rendered when you navigate between pages that share them, so a check that lives only in a layout can be skipped on a client-side navigation. `getCurrentUser` is cached per request, so asking again is free.
 
 **What stops an open redirect or user enumeration?**
-`safeCallbackUrl` only accepts paths that start with a single `/` and contain no backslash or control character (browsers delete tabs and newlines inside a URL, so `/\t/evil.example` would turn into `//evil.example`). The login error is one generic message, and for an unknown email we still run a bcrypt compare against a dummy hash so timing does not reveal which accounts exist. Registration does say "already exists", which is a conscious trade-off noted in `services/account.ts`.
+`safeCallbackUrl` only accepts paths that start with a single `/` and contain no backslash or control character (browsers delete tabs and newlines inside a URL, so `/\t/evil.example` would turn into `//evil.example`). The login error is one generic message, and for an unknown email we still run a bcrypt compare against a dummy hash so timing does not reveal which accounts exist. Registration does say "already exists", which is a conscious trade-off noted in `services/account.js`.
 
 **How are passwords stored?**
-bcrypt with cost 12 (`lib/auth/password.ts`). Zod requires 8 to 72 characters with a letter and a number, and at most 72 bytes; 72 because bcrypt ignores anything longer, and a non-English letter takes 2 to 4 bytes.
+bcrypt with cost 12 (`lib/auth/password.js`). Zod requires 8 to 72 characters with a letter and a number, and at most 72 bytes; 72 because bcrypt ignores anything longer, and a non-English letter takes 2 to 4 bytes.
 
 ### Database and Prisma
 
@@ -326,7 +327,7 @@ bcrypt with cost 12 (`lib/auth/password.ts`). Zod requires 8 to 72 characters wi
 `User` owns many `Interview`s and at most one `Resume`. An `Interview` has at most one `Feedback`. `Feedback.interviewId` and `Resume.userId` are unique, which is how "one-to-one" is expressed. Auth.js adds `Account`, `Session` and `VerificationToken`. Cascades delete a user's data; deleting a résumé only nulls `Interview.resumeId`.
 
 **What changed in Prisma 7 that affected you?**
-The datasource `url` moved out of `schema.prisma` into `prisma.config.ts`; the client needs a driver adapter (`@prisma/adapter-pg`) and the new `prisma-client` generator writes TypeScript into `src/generated/prisma`, which is git-ignored and rebuilt on install.
+The datasource `url` moved out of `schema.prisma` into `prisma.config.mjs`; the client needs a driver adapter (`@prisma/adapter-pg`) and the new `prisma-client` generator writes the client into `src/generated/prisma` (as TypeScript files that Next.js compiles), which is git-ignored and rebuilt on install.
 
 **Why two connection strings?**
 Supabase's transaction pooler (6543) suits many short serverless connections but cannot run migrations safely; the session pooler (5432) can. `DATABASE_URL` is for the app, `DIRECT_URL` for `prisma migrate`.
@@ -355,7 +356,7 @@ Each list is one `findMany` with a `select` that includes the related score, plu
 Three layers: `responseMimeType: application/json` with a `responseJsonSchema`; a tolerant parser (it strips a code fence); then Zod validation. If validation fails, one repair call lists the exact problems back to the model. If that fails too, the offline evaluator answers. A test keeps the JSON Schema and the Zod schema in step.
 
 **What if the model lies or the quotes do not match?**
-Annotations are quotes from the answer. `lib/annotate.ts` finds them tolerantly (case, whitespace, curly quotes, ellipses). A quote it cannot find is shown as a note beside the answer rather than silently dropped, so nothing the model said is invented into the highlight.
+Annotations are quotes from the answer. `lib/annotate.js` finds them tolerantly (case, whitespace, curly quotes, ellipses). A quote it cannot find is shown as a note beside the answer rather than silently dropped, so nothing the model said is invented into the highlight.
 
 **How do you handle prompt injection?**
 Candidate text is fenced in tags and the system prompt says it is data, not instructions. `fence()` strips lookalike tags from the answer. The model has no tools, and the server decides everything that matters: blank answers are forced to zero, the overall score is computed here, and the output must match a schema. The worst a successful injection can do is change that user's own report.
@@ -398,15 +399,50 @@ It has only Web APIs: no TCP sockets (so no `pg` or Prisma) and no Node-only mod
 See the table in `docs/ARCHITECTURE.md` section 12: server-only secrets, parameterised SQL, Zod on every input, Origin checks, security headers, bcrypt, rate limits, file checks, private bucket with short-lived links, ownership filters on every query, redacted logs.
 
 **What do your tests cover, and what do they not?**
-91 unit tests on the logic that is easy to get subtly wrong: slot and timezone rules, status transitions, scoring, the highlighter, validation, the rate limiter, transcript merging, reconcile, and the Gemini schema contract. They need no database. They do not cover the live database, Gemini or Supabase; the booking race and autosave SQL were checked by hand on PostgreSQL 16, and an integration suite against a real database is the next thing to add.
+Three layers. 216 unit tests on the logic that is easy to get subtly wrong (slot and timezone rules, status transitions, scoring, the highlighter, validation, the rate limiter, transcript merging, reconcile, the Gemini schema contract, and the integrity monitor's rules). 33 integration tests run the real services on a real PostgreSQL, including eight people racing for three seats, overlapping autosaves, simultaneous submits, the role rules, the schema's constraints and the integrity events' database rules. 21 Playwright tests drive a production build in Chromium from sign-up to report, check that another user gets a 404, and run an assessment with a synthetic camera. GitHub Actions runs all three on every push. They do not cover the live Gemini API or Supabase Storage (the offline provider stands in for Gemini), load testing, browsers other than Chromium, or the face detector on a real face.
+
+### The integrity monitor (assessment mode)
+
+**What does Assessment mode do?**
+An interview is booked as Practice (private, the default) or Assessment. In an assessment the browser looks at the candidate's camera five times a second with MediaPipe's face detector, and also notices the tab being left, the window losing focus and large pastes. Each noticed condition becomes a small event: its type, when it began, how long it lasted, the question showing and, for a paste, the length. They are sent to `POST /api/interviews/:id/integrity` and appear in the report as "Presence and focus". Start at `docs/INTEGRITY.md`; the code is `src/lib/integrity/` and `use-integrity-monitor.js`.
+
+**Is the video recorded or uploaded?**
+No. Detection runs in the candidate's browser (WebAssembly), each frame is discarded after it is looked at, and the database has no column for video, images or the pasted text; a `CHECK` constraint even limits the `detail` column to a character count. The browser does download the face model (about 230 KB), from Google by default or from our own `public/` folder if `NEXT_PUBLIC_FACE_MODEL_URL` is set.
+
+**How do you tell that someone is looking away?**
+The detector returns six keypoints for each face. We take how far the nose is from the midpoint of the eyes, divided by the distance between the eyes (`head-pose.js`). Facing the screen that is about 0, and it grows as the head turns. At 0.35 or more for four seconds it becomes a "looking away" event. It is a cheap geometric estimate, not a trained head-pose model, and the threshold was chosen by reasoning, not measured.
+
+**Why not flag the moment a face disappears?**
+Detectors flicker and people look at their keyboards. `SpanTracker` reports a condition only once it has lasted a minimum (three seconds for a missing face, two for several faces, four for looking away) and forgives gaps shorter than 700 ms. If sampling stops altogether, as in a throttled background tab, the span is closed at the last sighting instead of being extended.
+
+**Can a candidate cheat the monitor?**
+Yes, and we say so. The browser belongs to the candidate: they can use a second device or a virtual camera, edit the JavaScript, or block the requests, and the server cannot tell a blocked monitor from a clean session. What the server can do is refuse implausible data. That is why the report calls the output signals for a person to review, not proof, and why a flag never changes the score.
+
+**How does the server cope with data it cannot trust?**
+Strict Zod schemas (unknown keys refused, so no free text), ownership and state checks (only the owner's in-progress assessment accepts events), clock alignment using the browser's `sentAtMs`, a time window around the session, instant events forced to zero duration, a question id kept only if it is real, and caps of 50 events per request and 300 per interview. Three `CHECK` constraints in the migration repeat the rules that matter. `ingestEvents` is a pure function with its own unit tests.
+
+**How do you handle consent?**
+A checkbox on the booking form, with the same list of promises repeated on the details page and the start panel. It is enforced by the Zod schema, by the booking service (which stores `monitoringConsentAt` using the server's clock) and by a `CHECK` constraint, so an assessment cannot exist without it. A candidate who refuses the browser's camera prompt can still take the interview, and it is noted as "camera not available". This is a coursework prototype: for real candidates it would need a review against the data-protection rules that apply.
+
+**Why a Route Handler and not a Server Action for the events?**
+The browser sends from a timer and, as the page closes, with `fetch(..., { keepalive: true })`, which a Server Action cannot do. It also wants a plain JSON answer (`saved`, `dropped`) without anything being re-rendered.
+
+**What if a batch of events is lost?**
+Delivery is at least once. The browser's outbox keeps a batch after a timeout, a 408, a 429 or a 5xx and sends it again at the next flush, and drops one that the server refuses for good (404, 409, 422). A lost response can therefore cause a duplicate, which is accepted because the report adds points in coarse bands, so a duplicate cannot decide anything.
+
+**Does it affect the score?**
+No. The evaluation code never reads the events; the only readers are the integrity service and the report's mapper. The report says "This section never changes your score", and that is true by construction.
+
+**What is tested, and what is not?**
+The rules are unit tested (head-turn maths, trackers, the outbox, the server's checks, the report summary), the database rules and the concurrent-batch behaviour are integration tested on real PostgreSQL, and a browser test runs an assessment with a synthetic camera. What no automated test covers is the detector on a real face, so the accuracy of the thresholds is unmeasured.
 
 ### Honest answers
 
 **Did you implement internationalization?**
-No. It was out of scope and the UI is English only. The Next.js way would be a `[locale]` segment at the top of `app/`, a `proxy.ts` rule that reads `Accept-Language` and redirects `/` to `/en`, one dictionary file per language loaded in Server Components, `generateStaticParams` for the locale list, `lang` set on `<html>`, and `Intl` for dates and numbers. Our date formatting already goes through `Intl.DateTimeFormat` in `lib/format.ts`, which is the part that is hardest to retrofit.
+No. It was out of scope and the UI is English only. The Next.js way would be a `[locale]` segment at the top of `app/`, a `proxy.js` rule that reads `Accept-Language` and redirects `/` to `/en`, one dictionary file per language loaded in Server Components, `generateStaticParams` for the locale list, `lang` set on `<html>`, and `Intl` for dates and numbers. Our date formatting already goes through `Intl.DateTimeFormat` in `lib/format.js`, which is the part that is hardest to retrofit.
 
 **Did you implement voice or video answers?**
-No. Typed answers keep the AI step deterministic and testable, and the report can quote exact sentences. Voice would add speech-to-text before the same pipeline.
+No. Typed answers keep the AI step deterministic and testable, and the report can quote exact sentences. Voice would add speech-to-text before the same pipeline. What we did add is an optional Assessment mode that uses the camera for a presence check, analysed on the device and never recorded (see the integrity section above).
 
 **Why dark only?**
 The brief asked for a polished dark design. One finished theme beats two half-finished ones; the colours are CSS variables, so a light theme is a second set of values rather than a rewrite.
@@ -418,10 +454,10 @@ The UI kit follows the shadcn/ui structure (Radix primitives, `class-variance-au
 No, and the report says so (`candor-rubric-v1`). It scores against the rubric of the built-in question bank so the product demos without a key and survives an outage.
 
 **What is the weakest part?**
-The in-memory rate limiter (per instance), the missing integration tests, no CSP yet, and an offline evaluator that is a heuristic. All are listed in `docs/ARCHITECTURE.md` under Known limits, with the fix for each.
+The in-memory rate limiter (per instance), no CSP yet, a browser suite that follows one happy path, and an offline evaluator that is a heuristic. And the integrity monitor's thresholds, which are reasoned, not calibrated on real faces. All are listed in `docs/ARCHITECTURE.md` under Known limits, with the fix for each.
 
 **What would you do with another week?**
-Redis rate limiting, a nonce-based CSP, Testcontainers integration tests including the booking race, email verification and reminders, i18n, streaming the evaluation so the report appears as it is written, and a timer per question.
+Redis rate limiting, a nonce-based CSP, browser tests for the remaining screens, email verification and reminders, i18n, streaming the evaluation so the report appears as it is written, a timer per question, and calibrating the integrity thresholds on real recordings with a reviewer's view of the flags.
 
 ---
 
@@ -443,22 +479,27 @@ Redis rate limiting, a nonce-based CSP, Testcontainers integration tests includi
 | Session cookie | JWT, 7 days; bcrypt cost 12; password 8 to 72 characters |
 | ISR | `revalidate = 600` on `/` |
 | AI limits | 45 s per call, 50 s shared budget, route `maxDuration = 60` |
-| Rate limits | login 8 per 15 min per email, 20 per IP; register 6 per hour; book 10 per min; autosave 120 per min; start 8 per min; evaluate 5 per 10 min; résumé 6 per min |
-| Counts | 11 Route Handlers, 10 Server Actions, 6 categories, 91 tests |
+| Rate limits | login 8 per 15 min per email, 20 per IP; register 6 per hour; book 10 per min; autosave 120 per min; start 8 per min; evaluate 5 per 10 min; résumé 6 per min; integrity events 30 per min |
+| Integrity rules | A condition must last: face missing 3 s, several faces 2 s, looking away 4 s (head turn ≥ 0.35 eye-distances), tab hidden 1 s, focus lost 3 s. Paste of 40 or more characters. Grace 700 ms, a look every 200 ms, a send every 10 s |
+| Integrity points | Face missing 2, several faces 4, looking away 1, tab hidden 3 (each plus 1 per full 10 s, up to plus 6), focus lost 1, paste 2 (4 from 200 characters), camera off 2. Level: 0 clear, 1 to 5 noted, 6 or more worth a look |
+| Integrity limits | 50 events per request, 300 per interview, clock slack 60 s, the 3-second wait before a submit |
+| Counts | 12 Route Handlers, 10 Server Actions, 6 categories, 216 unit + 33 integration + 21 browser tests |
 
 ## Files worth opening
 
-1. `src/lib/services/booking.ts` — the serializable transaction and the conditional cancel
-2. `src/lib/services/session.ts` — the state machine, `jsonb_set` autosave, idempotent submit
-3. `src/lib/ai/index.ts`, `reconcile.ts`, `prompts.ts` — the AI pipeline
-4. `src/actions/resume.ts` and `src/lib/services/resume.ts` — the Server Action upload
-5. `src/app/(marketing)/page.tsx` and `categories/[slug]/page.tsx` — ISR and SSG
-6. `src/app/(app)/dashboard/layout.tsx` and `(app)/@modal/(.)feedback/[id]/page.tsx` — parallel and intercepting routes
-7. `src/proxy.ts`, `src/lib/auth/auth.ts`, `src/lib/auth/session.ts` — auth
+1. `src/lib/services/booking.js` — the serializable transaction and the conditional cancel
+2. `src/lib/services/session.js` — the state machine, `jsonb_set` autosave, idempotent submit
+3. `src/lib/ai/index.js`, `reconcile.js`, `prompts.js` — the AI pipeline
+4. `src/actions/resume.js` and `src/lib/services/resume.js` — the Server Action upload
+5. `src/app/(marketing)/page.jsx` and `categories/[slug]/page.jsx` — ISR and SSG
+6. `src/app/(app)/dashboard/layout.jsx` and `(app)/@modal/(.)feedback/[id]/page.jsx` — parallel and intercepting routes
+7. `src/proxy.js`, `src/lib/auth/auth.js`, `src/lib/auth/session.js` — auth
 8. `prisma/schema.prisma` and the migration
-9. `src/lib/http.ts`, `src/lib/action.ts`, `src/lib/errors.ts` — one error model, two entry points
-10. `src/app/api/health/route.ts` — Edge runtime
-11. `tests/ai-contract.test.ts` — keeping two schemas honest
+9. `src/lib/http.js`, `src/lib/action.js`, `src/lib/errors.js` — one error model, two entry points
+10. `src/app/api/health/route.js` — Edge runtime
+11. `tests/ai-contract.test.js` — keeping two schemas honest
+12. `src/lib/integrity/tracker.js` and `ingest.js` — the monitor's rules and the server's checks on data it cannot trust
+13. `src/components/interview/use-integrity-monitor.js` — the camera, the timers and the clean-up
 
 ## Pre-flight and if something breaks
 
@@ -469,5 +510,6 @@ Redis rate limiting, a nonce-based CSP, Testcontainers integration tests includi
 | Gemini is slow or errors | The fallback produces a report anyway (`candor-rubric-v1`). Say so. Or set `AI_MODE=mock`, restart, and continue. |
 | The slot is "too early" | `DEMO_MODE=true` in `.env`, restart the dev server. |
 | The database is unreachable | Check Wi-Fi, then the Supabase project is not paused. Fall back to a local PostgreSQL with `DATABASE_SSL=disable`, run `db:deploy` and `db:seed`. |
+| The camera does not start in an assessment | Check the browser's camera permission for the site, that no other app is using the camera, and that `public/mediapipe/wasm` exists (`npm install` creates it). Without a camera the interview still works, and the report notes "Camera not available". |
 | Résumé upload fails | Check `SUPABASE_URL` and the service-role key; skip the demo step and show the code and the rejection of a fake PDF in the unit tests. |
 | You are asked something you do not know | Say what the file does, open it, and reason from it. Examiners reward that more than a guess. |

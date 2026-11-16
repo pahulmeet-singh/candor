@@ -2,15 +2,19 @@
 //
 // Prisma 7 notes for the viva:
 //  - The datasource has no `url` here. The CLI reads connection strings from
-//    prisma.config.ts, and the running app passes its own to a driver adapter
-//    (src/lib/prisma-client.ts). That is what lets the app use Supabase's pooled
+//    prisma.config.mjs, and the running app passes its own to a driver adapter
+//    (src/lib/prisma-client.js). That is what lets the app use Supabase's pooled
 //    port while migrations use the session port.
-//  - The `prisma-client` generator writes plain TypeScript into src/generated
-//    (git-ignored, rebuilt by `prisma generate` on install and before build).
+//  - The `prisma-client` generator writes the client into src/generated (git-ignored, rebuilt by
+//    `prisma generate` on install and before build). Prisma writes it as TypeScript files; the app is
+//    plain JavaScript and imports it like any other module, and Next.js compiles it. With no tsconfig
+//    to infer from, the generator block states the module format and import style itself.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = ""
 }
 
 datasource db {
@@ -42,6 +46,25 @@ enum InterviewStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+/// PRACTICE (the default) is private: nothing is watched. ASSESSMENT turns on the camera and focus
+/// checks, and can only be booked once the candidate has agreed (Interview.monitoringConsentAt).
+enum InterviewMode {
+  PRACTICE
+  ASSESSMENT
+}
+
+/// What the integrity monitor can report. Mirrored by INTEGRITY_EVENT_TYPES in
+/// src/lib/integrity/constants.js; tests/integrity-enums.test.js fails if the two drift apart.
+enum IntegrityEventType {
+  FACE_MISSING
+  MULTIPLE_FACES
+  LOOKING_AWAY
+  TAB_HIDDEN
+  FOCUS_LOST
+  PASTE
+  CAMERA_OFF
 }
 
 // ── Users and Auth.js tables ───────────────────────────────────────────────
@@ -123,25 +146,31 @@ model Resume {
 }
 
 model Interview {
-  id          String            @id @default(cuid())
-  userId      String
+  id                  String            @id @default(cuid())
+  userId              String
   /// Set when the user asked for questions tailored to their résumé.
-  resumeId    String?
-  category    InterviewCategory
-  difficulty  Difficulty        @default(INTERMEDIATE)
-  scheduledAt DateTime          @db.Timestamptz(3)
-  durationMin Int               @default(30)
-  status      InterviewStatus   @default(SCHEDULED)
+  resumeId            String?
+  category            InterviewCategory
+  difficulty          Difficulty        @default(INTERMEDIATE)
+  /// PRACTICE is private. ASSESSMENT watches for the events in IntegrityEventType.
+  mode                InterviewMode     @default(PRACTICE)
+  /// When the candidate agreed to the checks. A CHECK constraint in the integrity_monitoring
+  /// migration makes it mandatory for ASSESSMENT (Prisma has no syntax for CHECK constraints).
+  monitoringConsentAt DateTime?         @db.Timestamptz(3)
+  scheduledAt         DateTime          @db.Timestamptz(3)
+  durationMin         Int               @default(30)
+  status              InterviewStatus   @default(SCHEDULED)
   /// Questions and the candidate's answers. Validated by transcriptSchema.
-  transcript  Json?
-  startedAt   DateTime?         @db.Timestamptz(3)
-  completedAt DateTime?         @db.Timestamptz(3)
-  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+  transcript          Json?
+  startedAt           DateTime?         @db.Timestamptz(3)
+  completedAt         DateTime?         @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(3)
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resume   Resume?   @relation(fields: [resumeId], references: [id], onDelete: SetNull)
-  feedback Feedback?
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume          Resume?          @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  feedback        Feedback?
+  integrityEvents IntegrityEvent[]
 
   /// "My interviews" tabs and the active-bookings limit.
   @@index([userId, status, scheduledAt])
@@ -164,4 +193,27 @@ model Feedback {
   interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
+}
+
+/// One thing the integrity monitor noticed during an ASSESSMENT interview. Only facts about the
+/// session are kept: what, when, for how long and on which question. Never video, images or text.
+model IntegrityEvent {
+  id          String             @id @default(cuid())
+  interviewId String
+  type        IntegrityEventType
+  /// The question that was on screen when it began (an id from Interview.transcript), if known.
+  questionId  String?
+  /// When it began, by the candidate's clock. The service rejects times far outside the session.
+  startedAt   DateTime           @db.Timestamptz(3)
+  /// 0 for instant events such as a paste.
+  durationMs  Int                @default(0)
+  /// Only ever `{ "chars": <number> }`, for a paste. A CHECK constraint refuses anything else,
+  /// so free text cannot be stored here even by a bug.
+  detail      Json?
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+
+  /// One interview's events in time order, for the report.
+  @@index([interviewId, startedAt])
 }

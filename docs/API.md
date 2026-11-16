@@ -79,6 +79,7 @@ All of these set `dynamic = "force-dynamic"` (never cached) except where noted. 
 | `PATCH` | `/api/interviews/:id` | Autosave one answer | user | 120 / min |
 | `DELETE` | `/api/interviews/:id` | Cancel a booking | user | 20 / min |
 | `POST` | `/api/interviews/:id/questions` | Start the session and generate its questions | user | 8 / min |
+| `POST` | `/api/interviews/:id/integrity` | Send the integrity monitor's events (assessments only) | user | 30 / min |
 | `POST` | `/api/interviews/:id/evaluate` | Submit answers and create the report | user | 5 / 10 min |
 | `GET` | `/api/feedback/:id` | One full report | user | |
 | `GET` | `/api/resume/:id/download` | 302 to a 60-second signed download link | user | |
@@ -124,6 +125,7 @@ Query: `tab` = `upcoming` (default) | `past` | `cancelled`; `page` = 1 to 500 (d
       "id": "cm3k8q2x40001qz0h9d7l1a2b",
       "category": "DSA",
       "difficulty": "INTERMEDIATE",
+      "mode": "PRACTICE",
       "scheduledAt": "2026-11-02T05:00:00.000Z",
       "durationMin": 30,
       "status": "SCHEDULED",
@@ -148,7 +150,9 @@ Query: `tab` = `upcoming` (default) | `past` | `cancelled`; `page` = 1 to 500 (d
   "category": "FULLSTACK_NEXT",
   "difficulty": "INTERMEDIATE",
   "scheduledAt": "2026-11-03T05:30:00.000Z",
-  "useResume": false
+  "useResume": false,
+  "mode": "PRACTICE",
+  "monitoringConsent": false
 }
 ```
 
@@ -158,6 +162,8 @@ Query: `tab` = `upcoming` (default) | `past` | `cancelled`; `page` = 1 to 500 (d
 | `difficulty` | `BEGINNER`, `INTERMEDIATE`, `ADVANCED` |
 | `scheduledAt` | ISO instant with offset; must be the start of one of the day's slots, at least 30 minutes away and within 14 days |
 | `useResume` | optional boolean, default `false`; `true` requires an uploaded résumé |
+| `mode` | optional, `PRACTICE` (default: private, nothing is watched) or `ASSESSMENT` (camera and focus checks; see [INTEGRITY.md](INTEGRITY.md)) |
+| `monitoringConsent` | optional boolean, default `false`. Must be `true` when `mode` is `ASSESSMENT`, otherwise 422 `VALIDATION` with a message under `fieldErrors.monitoringConsent`. The server stores the time it was given (`Interview.monitoringConsentAt`). Ignored for `PRACTICE`. |
 
 **201 Created**, `Location: /api/interviews/:id`, body: the `InterviewDTO` shown above. Errors: 401, 403, 409 `SLOT_FULL` / `LIMIT_REACHED` / `CONFLICT`, 422 `VALIDATION` / `SLOT_INVALID`, 429.
 
@@ -192,6 +198,40 @@ Cancels a booking that has not started and returns the updated `InterviewDTO` (`
 ### `POST /api/interviews/:id/questions`
 
 Starts the session: checks the room is open (10 minutes before the slot until it ends, or any time with `DEMO_MODE`), generates five questions (Gemini, tailored to the résumé when the booking asked for it, otherwise the offline bank), stores them and moves the interview to `IN_PROGRESS`. No body. Returns the interview with its `transcript`. **Calling it again returns the same questions**, so a reload never regenerates them. `maxDuration = 60`.
+
+### `POST /api/interviews/:id/integrity`
+
+Called by the browser while an **assessment** is running (never for a practice interview). The integrity monitor collects facts about the session (a face out of frame, a tab that was left, a large paste) and sends them in small batches, every ten seconds and once more when the page closes.
+
+```json
+{
+  "sentAtMs": 1793598600000,
+  "events": [
+    { "type": "FACE_MISSING", "startedAtMs": 1793598571000, "durationMs": 4200, "questionId": "q2" },
+    { "type": "PASTE", "startedAtMs": 1793598590000, "durationMs": 0, "questionId": "q2", "detail": { "chars": 312 } }
+  ]
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `sentAtMs` | The browser's own clock (epoch ms) when it sent the batch. The server compares it with its clock and moves every event by the difference, so a laptop with the wrong time still reports correctly. |
+| `events` | 1 to 50 per request. |
+| `type` | `FACE_MISSING`, `MULTIPLE_FACES`, `LOOKING_AWAY`, `TAB_HIDDEN`, `FOCUS_LOST`, `PASTE`, `CAMERA_OFF` |
+| `startedAtMs` | Epoch ms on the browser's clock. |
+| `durationMs` | 0 to 3,600,000. `PASTE` and `CAMERA_OFF` happen at one moment, so the server stores 0 for them whatever is sent. |
+| `questionId` | The question on screen when it began, or `null`. Kept only if it is a question of this interview. |
+| `detail` | `{ "chars": n }`, for a `PASTE` only: how long the pasted text was. Dropped for every other type. The text itself is never sent. |
+
+Unknown keys are refused (422), so there is nowhere to put free text, an image or a frame of video.
+
+```json
+{ "saved": 2, "dropped": 0 }
+```
+
+`dropped` counts events the server refused: outside the session's time window (the session start minus 60 s, up to now plus 60 s) or over the limit of **300 events per interview**. A batch that is partly refused is still accepted; the rest is stored. Errors: 401; 404 if the interview is not yours; 409 `INVALID_STATE` if it is a practice interview or is not `IN_PROGRESS` (a finished report cannot be added to); 422; 429.
+
+**Delivery is at least once.** If a response is lost the browser sends the batch again, so an event can be stored twice. The report only adds points up in coarse bands, so a repeat nudges a number and never decides anything.
 
 ### `POST /api/interviews/:id/evaluate`
 
@@ -232,11 +272,29 @@ One report: the scores, the per-question annotations and model answers, and the 
     "nextSteps": ["..."]
   },
   "transcript": { "questions": [], "answers": {}, "source": {} },
-  "interview": { "id": "...", "category": "FRONTEND", "difficulty": "INTERMEDIATE", "scheduledAt": "...", "startedAt": "...", "completedAt": "...", "durationMin": 30 }
+  "integrity": null,
+  "interview": { "id": "...", "category": "FRONTEND", "difficulty": "INTERMEDIATE", "mode": "PRACTICE", "scheduledAt": "...", "startedAt": "...", "completedAt": "...", "durationMin": 30 }
 }
 ```
 
-`overallScore` (0 to 100) is computed by the server from the question scores. `readiness` is `NEEDS_WORK` (below 50), `ON_TRACK` (below 75) or `INTERVIEW_READY`. The five competency keys are always `technical_accuracy`, `depth`, `problem_solving`, `communication` and `structure` (`src/lib/constants/competencies.ts`), each scored 0 to 10, so reports are comparable between sessions.
+`integrity` is `null` for a practice interview, which is never watched. For an assessment it is a summary of the stored events:
+
+```json
+{
+  "level": "NOTED",
+  "points": 2,
+  "headline": "A few interruptions were noted.",
+  "totalEvents": 1,
+  "byType": [{ "type": "PASTE", "label": "Pasted text into an answer", "count": 1, "totalMs": 0 }],
+  "timeline": [
+    { "id": "cm3k9d0aa0003qz0h1b2c3d4e", "type": "PASTE", "label": "Pasted text into an answer", "offsetMs": 312000, "durationMs": 0, "questionNumber": 2, "note": "120 characters" }
+  ]
+}
+```
+
+`level` is `CLEAR` (0 points), `NOTED` (1 to 5) or `REVIEW` (6 or more). It is information for a person to read and **never changes `overallScore`**: nothing in the evaluation reads these events.
+
+`overallScore` (0 to 100) is computed by the server from the question scores. `readiness` is `NEEDS_WORK` (below 50), `ON_TRACK` (below 75) or `INTERVIEW_READY`. The five competency keys are always `technical_accuracy`, `depth`, `problem_solving`, `communication` and `structure` (`src/lib/constants/competencies.js`), each scored 0 to 10, so reports are comparable between sessions.
 
 ### `GET /api/resume/:id/download`
 
@@ -272,24 +330,26 @@ Receives `{ "name": "LCP", "value": 1234.5, "rating": "good", "path": "/dashboar
 
 Called by the UI, not meant for external use (each is a POST to a generated URL that Next.js protects with an Origin check). Each one re-authenticates and re-validates its input, then returns an `ActionResult`:
 
-```ts
-type ActionResult<T> =
-  | { ok: true; data: T; message?: string }
-  | { ok: false; error: string; code?: ErrorCode; fieldErrors?: Record<string, string[]> };
+```js
+// success: `data` is what the action returns; `message` is optional text for a toast
+{ ok: true, data: { /* ... */ }, message: "Saved." }
+
+// failure: `code` is one of the error codes below; `fieldErrors` maps a form field to its messages
+{ ok: false, error: "Choose a later time.", code: "VALIDATION", fieldErrors: { scheduledAt: ["Choose a later time."] } }
 ```
 
 | Action | File | Input | On success | Revalidates | Limit |
 | --- | --- | --- | --- | --- | --- |
-| `loginAction` | `actions/auth.ts` | form: `email`, `password`, `callbackUrl?` | redirects to a safe `callbackUrl` or `/dashboard` | | 8 / 15 min per email, 20 / 15 min per IP |
-| `registerAction` | `actions/auth.ts` | form: `name`, `email`, `password` | creates the user, signs in, redirects to `/dashboard` | | 6 / hour per IP |
-| `googleSignInAction` | `actions/auth.ts` | form: `callbackUrl?` | starts the Google OAuth flow | | |
-| `logoutAction` | `actions/auth.ts` | none | ends the session, redirects to `/` | | |
-| `bookInterviewAction` | `actions/interviews.ts` | object, same as `POST /api/interviews` | `InterviewDTO` | `/interviews`, `/dashboard` | 10 / min |
-| `cancelInterviewAction` | `actions/interviews.ts` | interview id | `InterviewDTO` | `/interviews`, `/interviews/:id`, `/dashboard` | 20 / min |
-| `saveAnswerAction` | `actions/interviews.ts` | `{ interviewId, questionId, text }` | `{ savedAt }` | none (the room holds its own state) | 120 / min |
-| `uploadResumeAction` | `actions/resume.ts` | form: `file` (PDF, up to 4 MB) | `ResumeDTO` | `/resume`, `/interviews/new` | 6 / min |
-| `deleteResumeAction` | `actions/resume.ts` | none | | `/resume`, `/interviews/new` | 6 / min |
-| `setRoleAction` | `actions/admin.ts` | form: `userId`, `role` | `{ id, role }` | `/admin` | admin only |
+| `loginAction` | `actions/auth.js` | form: `email`, `password`, `callbackUrl?` | redirects to a safe `callbackUrl` or `/dashboard` | | 8 / 15 min per email, 20 / 15 min per IP |
+| `registerAction` | `actions/auth.js` | form: `name`, `email`, `password` | creates the user, signs in, redirects to `/dashboard` | | 6 / hour per IP |
+| `googleSignInAction` | `actions/auth.js` | form: `callbackUrl?` | starts the Google OAuth flow | | |
+| `logoutAction` | `actions/auth.js` | none | ends the session, redirects to `/` | | |
+| `bookInterviewAction` | `actions/interviews.js` | object, same as `POST /api/interviews` | `InterviewDTO` | `/interviews`, `/dashboard` | 10 / min |
+| `cancelInterviewAction` | `actions/interviews.js` | interview id | `InterviewDTO` | `/interviews`, `/interviews/:id`, `/dashboard` | 20 / min |
+| `saveAnswerAction` | `actions/interviews.js` | `{ interviewId, questionId, text }` | `{ savedAt }` | none (the room holds its own state) | 120 / min |
+| `uploadResumeAction` | `actions/resume.js` | form: `file` (PDF, up to 4 MB) | `ResumeDTO` | `/resume`, `/interviews/new` | 6 / min |
+| `deleteResumeAction` | `actions/resume.js` | none | | `/resume`, `/interviews/new` | 6 / min |
+| `setRoleAction` | `actions/admin.js` | form: `userId`, `role` | `{ id, role }` | `/admin` | admin only |
 
 Notes:
 

@@ -15,6 +15,7 @@ Built for **INT257 · Modern Web Application Development** with the Next.js App 
 | **Categories** | Six interview rounds: Frontend, Backend & APIs, Data structures & algorithms, System design, Behavioural, Full-stack Next.js. Each has its own question bank at three difficulty levels. |
 | **Slot booking** | 30-minute slots, 10:00 to 18:00 IST, for the next 14 days. Three seats per slot, at most five upcoming bookings per person. Two people grabbing the last seat at the same moment cannot both get it. |
 | **Interview room** | Five questions, easiest first, typed answers with autosave and a live clock. With Gemini switched on, questions can be tailored to your résumé. |
+| **Assessment mode** | Book an interview as **Practice** (private, the default) or **Assessment**. An assessment, with the candidate's consent, runs a presence check in their browser: it notices a face out of frame, more than one face, a head turned away, a left tab or window, and large pastes. The camera picture is analysed on the device and never recorded or uploaded. What it noticed appears in the report as signals for a person to review, and never changes the score. See [docs/INTEGRITY.md](docs/INTEGRITY.md). |
 | **Feedback report** | A score out of 100, five competency scores, and every answer shown with the sentences that were strong or weak highlighted, plus a model answer. Reports open as a dialog from the list and as a full page when linked directly. |
 | **Dashboard** | Your score trend, upcoming sessions and totals. Each block streams in on its own. |
 | **Résumé upload** | One PDF per user, checked on the server and stored in a private Supabase bucket. Downloads use a link that expires after 60 seconds. |
@@ -26,7 +27,7 @@ Not included, on purpose: see [Scope](#scope).
 
 | Layer | Choice | Why this one |
 | --- | --- | --- |
-| Framework | **Next.js 16** (App Router), React 19 | The course subject. Uses `proxy.ts` (Next 16's name for middleware), parallel and intercepting routes, and the async `params` / `searchParams` API. |
+| Framework | **Next.js 16** (App Router), React 19 | The course subject. Uses `proxy.js` (Next 16's name for middleware), parallel and intercepting routes, and the async `params` / `searchParams` API. |
 | Database | **PostgreSQL on Supabase** through **Prisma 7** | Prisma gives typed queries and migrations; the `pg` driver adapter lets the app use Supabase's pooled port. |
 | Auth | **Auth.js v5** (`next-auth`) | Credentials sign-in, optional Google, JWT sessions in an HttpOnly cookie. |
 | File storage | **Supabase Storage** | Private bucket, server-side service-role key, short-lived signed URLs. |
@@ -86,6 +87,7 @@ npm run dev            # http://localhost:3000
 | `AI_FALLBACK` | no | Default `true`: if Gemini fails, use the offline evaluator instead of failing the request. |
 | `NEXT_PUBLIC_APP_URL` | no | Public base URL for metadata, sitemap and Open Graph. |
 | `DEMO_MODE` | no | `true` lets scheduled interviews start at any time. Turn it off in production. |
+| `NEXT_PUBLIC_FACE_MODEL_URL` | no | Where the browser fetches the face-detection model for assessments. Empty uses Google's published file; set a path under `public/` to serve it yourself. Read at build time. |
 
 ## Scripts
 
@@ -95,8 +97,11 @@ npm run dev            # http://localhost:3000
 | `npm run build` | `prisma generate` then `next build`. |
 | `npm start` | Serve the production build. |
 | `npm run lint` | ESLint (`eslint .`; Next 16 removed `next lint`). |
-| `npm run typecheck` | `tsc --noEmit`. |
-| `npm test` | Unit tests with Node's built-in runner through `tsx`. No database needed. |
+| `npm test` | Unit tests with Node's built-in runner, started through `tsx` so the `@/` import alias works. No database needed. |
+| `npm run test:integration` | The services on a real PostgreSQL (needs `TEST_DATABASE_URL`, see [docs/TESTING.md](docs/TESTING.md)). |
+| `npm run test:db:migrate` | Apply the migrations to the test database. |
+| `npm run test:e2e` | Playwright: Chromium drives a production build through the whole journey. |
+| `npm run test:e2e:browser` | Download the Chromium that Playwright uses (once). |
 | `npm run db:migrate` | Create and apply a migration in development. |
 | `npm run db:deploy` | Apply existing migrations (use this on a fresh database and in production). |
 | `npm run db:seed` | Load the demo users and sessions. Safe to run repeatedly. |
@@ -112,7 +117,7 @@ npm run dev            # http://localhost:3000
 | `/categories/[slug]` | **SSG** (`generateStaticParams`, `dynamicParams = false`) | The six slugs are known at build time. An unknown slug is a 404 without running any code. |
 | `/sample-report` | **Static** | A fixture report for visitors who are not signed in. |
 | `/login`, `/register` | **SSR** shell, **client** forms | The layout reads the session to bounce signed-in users; the forms use `useActionState`. |
-| `/dashboard` | **SSR** with **parallel routes** (`@stats`, `@trend`, `@upcoming`) | Per-user data, so never cached. Each slot has its own `loading.tsx`, so the three blocks stream in independently. |
+| `/dashboard` | **SSR** with **parallel routes** (`@stats`, `@trend`, `@upcoming`) | Per-user data, so never cached. Each slot has its own `loading.jsx`, so the three blocks stream in independently. |
 | `/interviews`, `/feedback` | **SSR**, state in the URL (`?tab=`, `?page=`, `?category=`, `?range=`, `?sort=`) | Tabs and pages are plain links and the filter is a GET form, so they work without JavaScript and can be shared. |
 | `/interviews/new` | SSR page, **CSR** booking form | Picking a day fetches `/api/slots`; booking calls a Server Action. |
 | `/interviews/[id]/session` | SSR page, **CSR** room | Typing, autosave and the countdown are client state. |
@@ -124,12 +129,12 @@ npm run dev            # http://localhost:3000
 
 ```
 prisma/
-  schema.prisma          User, Account, Session, VerificationToken (Auth.js) + Resume, Interview, Feedback
+  schema.prisma          User, Account, Session, VerificationToken (Auth.js) + Resume, Interview, Feedback, IntegrityEvent
   migrations/            SQL, applied with `prisma migrate deploy`
-  seed.ts                Demo users, history and upcoming bookings
+  seed.js                Demo users, history and upcoming bookings
 src/
-  proxy.ts               Next 16 proxy: optimistic login redirect + request ids
-  instrumentation.ts     Error logging hook (onRequestError)
+  proxy.js               Next 16 proxy: optimistic login redirect + request ids
+  instrumentation.js     Error logging hook (onRequestError)
   app/
     (marketing)/         Public pages: landing (ISR), categories (SSG), sample report
     (auth)/              Login and register
@@ -146,8 +151,11 @@ src/
     ai/                  Prompts, Gemini client, JSON schemas, reconciliation, offline evaluator
     validations/         Zod schemas
     constants/           Categories, competencies, limits, question bank
-    slots.ts status.ts scoring.ts annotate.ts    Pure logic with unit tests
-tests/                   Node test runner
+    slots.js status.js scoring.js annotate.js    Pure logic with unit tests
+    integrity/           Assessment mode: head-turn estimate, trackers, outbox, server checks, report summary
+tests/                   Unit tests (Node test runner); integration/ runs the services on a real PostgreSQL
+e2e/                     Playwright browser tests (playwright.config.js is at the root)
+.github/workflows/       CI: lint, unit, integration and browser tests
 docs/                    Architecture, API, deployment, viva notes
 ```
 
@@ -156,13 +164,12 @@ The rule that holds the structure together: **actions and route handlers are thi
 ## Checks
 
 ```bash
-npm run typecheck
 npm run lint
 npm test
 npm run build
 ```
 
-The tests cover the logic that is easy to get subtly wrong: slot generation across the IST/UTC boundary, status rules, the scoring maths, the answer highlighter, validation schemas, the rate limiter, transcript merging, and the contract between the JSON Schema sent to Gemini and the Zod schema that checks the reply. They run without a database or network.
+Three layers of tests, each runnable on its own. `npm test` (216 unit tests, no database) covers the logic that is easy to get subtly wrong: slot generation across the IST/UTC boundary, status rules, the scoring maths, the answer highlighter, validation schemas, the rate limiter, the transcript merge and the integrity monitor's rules. `npm run test:integration` (33 tests) runs the services on a real PostgreSQL, including eight people racing for three seats, and `npm run test:e2e` (21 tests) drives a production build in Chromium from sign-up to report, including an assessment with a synthetic camera. Setup and details are in [docs/TESTING.md](docs/TESTING.md). GitHub Actions runs all of it on every push.
 
 ## Scope
 
@@ -170,8 +177,8 @@ The tests cover the logic that is easy to get subtly wrong: slot generation acro
 
 **Not implemented, deliberately:**
 
-- **Internationalization.** The interface is English only. Adding it means a `[locale]` segment plus a dictionary per language; `proxy.ts` is where locale negotiation would go.
-- **Voice or video answers.** Answers are typed, which keeps the AI step deterministic and testable.
+- **Internationalization.** The interface is English only. Adding it means a `[locale]` segment plus a dictionary per language; `proxy.js` is where locale negotiation would go.
+- **Voice or video answers.** Answers are typed, which keeps the AI step deterministic and testable. (Assessment mode does use the camera, but only for an on-device presence check that is never recorded.)
 - **Light theme.** The design is dark only; there is no theme toggle.
 - **Email notifications and calendar invites.**
 - **A shared rate-limit store.** Limits are per server instance (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#known-limits)).
@@ -181,6 +188,6 @@ The tests cover the logic that is easy to get subtly wrong: slot generation acro
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, data model, rendering and caching, booking concurrency, the AI pipeline, security, trade-offs.
 - [docs/API.md](docs/API.md): every Route Handler and Server Action with request and response shapes.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Supabase and Vercel setup, environment, first-run checklist, troubleshooting.
+- [docs/INTEGRITY.md](docs/INTEGRITY.md): assessment mode: what is noticed, how it works, privacy, the trust model and its limits.
+- [docs/TESTING.md](docs/TESTING.md): the three test layers, how to run each, what they cover, CI, and what to do when one fails.
 - [docs/VIVA_CHEAT_SHEET.md](docs/VIVA_CHEAT_SHEET.md): syllabus-to-code map and likely viva questions with answers.
-# candor
-# candor
