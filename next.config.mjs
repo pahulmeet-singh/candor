@@ -27,6 +27,9 @@ const nextConfig = {
     // the app caps files at 4 MB (Vercel's request body limit is 4.5 MB).
     serverActions: { bodySizeLimit: "5mb" },
   },
+  deprecated: {
+    looseRouteMatching: true,
+  },
   images: {
     // Google profile pictures (only used when Google sign-in is configured).
     remotePatterns: [{ protocol: "https", hostname: "lh3.googleusercontent.com" }],
